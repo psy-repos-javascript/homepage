@@ -32,13 +32,13 @@ export async function cleanWidgetGroups(widgets) {
     const optionKeys = Object.keys(sanitizedOptions);
 
     // delete private options from the sanitized options
-    ["username", "password", "key"].forEach((pO) => {
+    ["username", "password", "key", "apiKey"].forEach((pO) => {
       if (optionKeys.includes(pO)) {
         delete sanitizedOptions[pO];
       }
     });
 
-    // delete url from the sanitized options if the widget is not a search or glances widgeth
+    // delete url from the sanitized options if the widget is not a search or glances widget
     if (widget.type !== "search" && widget.type !== "glances" && optionKeys.includes("url")) {
       delete sanitizedOptions.url;
     }
@@ -57,7 +57,7 @@ export async function getPrivateWidgetOptions(type, widgetIndex) {
   const widgets = await widgetsFromConfig();
 
   const privateOptions = widgets.map((widget) => {
-    const { index, url, username, password, key } = widget.options;
+    const { index, url, username, password, key, apiKey } = widget.options;
 
     return {
       type: widget.type,
@@ -67,6 +67,7 @@ export async function getPrivateWidgetOptions(type, widgetIndex) {
         username,
         password,
         key,
+        apiKey,
       },
     };
   });

@@ -5,6 +5,7 @@ import { createUnzip, constants as zlibConstants } from "node:zlib";
 import { http, https } from "follow-redirects";
 
 import { addCookieToJar, setCookieHeader } from "./cookie-jar";
+import { sanitizeErrorURL } from "./api-helpers";
 
 import createLogger from "utils/logger";
 
@@ -44,7 +45,7 @@ function handleRequest(requestor, url, params) {
 
         // zlib errors
         responseContent.on("error", (e) => {
-          logger.error(e);
+          if (e) logger.error(e);
           responseContent = response; // fallback
         });
         response.pipe(responseContent);
@@ -88,22 +89,19 @@ export async function httpProxy(url, params = {}) {
     request = httpsRequest(constructedUrl, {
       agent: new https.Agent({
         rejectUnauthorized: false,
-        autoSelectFamily: true,
       }),
       ...params,
     });
   } else {
     request = httpRequest(constructedUrl, {
-      agent: new http.Agent({
-        autoSelectFamily: true,
-      }),
+      agent: new http.Agent(),
       ...params,
     });
   }
 
   try {
     const [status, contentType, data, responseHeaders] = await request;
-    return [status, contentType, data, responseHeaders];
+    return [status, contentType, data, responseHeaders, params];
   } catch (err) {
     logger.error(
       "Error calling %s//%s%s%s...",
@@ -112,7 +110,12 @@ export async function httpProxy(url, params = {}) {
       constructedUrl.port ? `:${constructedUrl.port}` : "",
       constructedUrl.pathname,
     );
-    logger.error(err);
-    return [500, "application/json", { error: { message: err?.message ?? "Unknown error", url, rawError: err } }, null];
+    if (err) logger.error(err);
+    return [
+      500,
+      "application/json",
+      { error: { message: err?.message ?? "Unknown error", url: sanitizeErrorURL(url), rawError: err } },
+      null,
+    ];
   }
 }
