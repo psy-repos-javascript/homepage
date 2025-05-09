@@ -1,9 +1,9 @@
-import { getAllClasses, getInnerBlock, getBottomBlock } from "./container";
+import { getAllClasses, getBottomBlock, getInnerBlock } from "./container";
 
 export default function ContainerLink({ children = [], options, additionalClassNames = "", target }) {
   return (
     <a
-      href={options.url}
+      href={options.href || options.url}
       target={target}
       className={`${getAllClasses(options, additionalClassNames)} information-widget-link`}
     >
