@@ -1,20 +1,16 @@
-import { useMemo } from "react";
-import { DateTime, Info } from "luxon";
 import classNames from "classnames";
+import { DateTime, Info } from "luxon";
 import { useTranslation } from "next-i18next";
+import { useMemo } from "react";
 
-import Event from "./event";
+import Event, { compareDateTimezone } from "./event";
 
 const cellStyle = "relative w-10 flex items-center justify-center flex-col";
 const monthButton = "pl-6 pr-6 ml-2 mr-2 hover:bg-theme-100/20 dark:hover:bg-white/5 rounded-md cursor-pointer";
 
-export function Day({ weekNumber, weekday, events, colorVariants, showDate, setShowDate }) {
-  const currentDate = DateTime.now();
-
-  const cellDate = showDate.set({ weekday, weekNumber }).startOf("day");
-  const filteredEvents = events?.filter(
-    (event) => event.date?.startOf("day").toUnixInteger() === cellDate.toUnixInteger(),
-  );
+export function Day({ weekNumber, weekday, events, colorVariants, showDate, setShowDate, currentDate }) {
+  const cellDate = showDate.set({ weekday, weekNumber, weekYear: showDate.year }).startOf("day");
+  const filteredEvents = events?.filter((event) => compareDateTimezone(cellDate, event));
 
   const dayStyles = (displayDate) => {
     let style = "h-9 ";
@@ -39,7 +35,7 @@ export function Day({ weekNumber, weekday, events, colorVariants, showDate, setS
       // today style
       style += "text-black-500 bg-theme-100/20 dark:bg-black/20 rounded-md ";
     } else {
-      style += "hover:bg-theme-100/20 dark:hover:bg-white/5 rounded-md cursor-pointer ";
+      style += "hover:bg-theme-100/20 dark:hover:bg-white/5 rounded-md cursor-pointer";
     }
 
     return style;
@@ -61,7 +57,7 @@ export function Day({ weekNumber, weekday, events, colorVariants, showDate, setS
             .map((event) => (
               <span
                 key={`${event.date.ts}+${event.color}-${event.title}-${event.additional}`}
-                className={classNames("inline-flex h-1 w-1 m-0.5 rounded", colorVariants[event.color] ?? "gray")}
+                className={classNames("inline-flex h-1 w-1 m-0.5 rounded-sm", colorVariants[event.color] ?? "gray")}
               />
             ))}
       </span>
@@ -79,10 +75,9 @@ const dayInWeekId = {
   sunday: 7,
 };
 
-export default function Monthly({ service, colorVariants, events, showDate, setShowDate }) {
+export default function Monthly({ service, colorVariants, events, showDate, setShowDate, currentDate }) {
   const { widget } = service;
   const { i18n } = useTranslation();
-  const currentDate = DateTime.now().setLocale(i18n.language).startOf("day");
 
   const dayNames = Info.weekdays("short", { locale: i18n.language });
 
@@ -111,6 +106,7 @@ export default function Monthly({ service, colorVariants, events, showDate, setS
   }
 
   const eventsArray = Object.keys(events).map((eventKey) => events[eventKey]);
+  eventsArray.sort((a, b) => a.date - b.date);
 
   return (
     <div className="w-full text-center">
@@ -165,6 +161,7 @@ export default function Monthly({ service, colorVariants, events, showDate, setS
                 colorVariants={colorVariants}
                 showDate={showDate}
                 setShowDate={setShowDate}
+                currentDate={currentDate}
               />
             )),
           )}
@@ -172,7 +169,7 @@ export default function Monthly({ service, colorVariants, events, showDate, setS
 
         <div className="flex flex-col">
           {eventsArray
-            ?.filter((event) => showDate.startOf("day").ts === event.date?.startOf("day").ts)
+            ?.filter((event) => compareDateTimezone(showDate, event))
             .slice(0, widget?.maxEvents ?? 10)
             .map((event) => (
               <Event
@@ -180,7 +177,7 @@ export default function Monthly({ service, colorVariants, events, showDate, setS
                 event={event}
                 colorVariants={colorVariants}
                 showDateColumn={widget?.showTime ?? false}
-                showTime={widget?.showTime && event.date.startOf("day").ts === showDate.startOf("day").ts}
+                showTime={widget?.showTime && compareDateTimezone(showDate, event)}
               />
             ))}
         </div>
