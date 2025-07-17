@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
 import { useTranslation } from "next-i18next";
+import { useEffect, useState } from "react";
 
 import Container from "../widget/container";
 import Raw from "../widget/raw";
@@ -23,6 +23,7 @@ export default function DateTime({ options }) {
 
   useEffect(() => {
     const dateFormat = new Intl.DateTimeFormat(dateLocale, { ...format });
+    setDate(dateFormat.format(new Date()));
     const interval = setInterval(() => {
       setDate(dateFormat.format(new Date()));
     }, 1000);
