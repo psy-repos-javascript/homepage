@@ -1,16 +1,16 @@
-import useSWR from "swr";
-import { useState } from "react";
-import { WiCloudDown } from "react-icons/wi";
-import { MdLocationDisabled, MdLocationSearching } from "react-icons/md";
 import { useTranslation } from "next-i18next";
+import { useState } from "react";
+import { MdLocationDisabled, MdLocationSearching } from "react-icons/md";
+import { WiCloudDown } from "react-icons/wi";
+import useSWR from "swr";
 
-import Error from "../widget/error";
+import mapIcon from "../../../utils/weather/owm-condition-map";
 import Container from "../widget/container";
 import ContainerButton from "../widget/container_button";
+import Error from "../widget/error";
 import PrimaryText from "../widget/primary_text";
 import SecondaryText from "../widget/secondary_text";
 import WidgetIcon from "../widget/widget_icon";
-import mapIcon from "../../../utils/weather/owm-condition-map";
 
 function Widget({ options }) {
   const { t, i18n } = useTranslation();
@@ -42,7 +42,7 @@ function Widget({ options }) {
     <Container options={options} additionalClassNames="information-widget-openweathermap">
       <PrimaryText>
         {options.label && `${options.label}, `}
-        {t("common.number", { value: data.main.temp, style: "unit", unit })}
+        {t("common.number", { value: data.main.temp, style: "unit", unit, ...options.format })}
       </PrimaryText>
       <SecondaryText>{data.weather[0].description}</SecondaryText>
       <WidgetIcon icon={mapIcon(condition, timeOfDay)} size="xl" />

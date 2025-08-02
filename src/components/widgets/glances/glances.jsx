@@ -1,16 +1,15 @@
-import useSWR from "swr";
+import classNames from "classnames";
+import { useTranslation } from "next-i18next";
 import { useContext } from "react";
 import { FaMemory, FaRegClock, FaThermometerHalf } from "react-icons/fa";
 import { FiCpu, FiHardDrive } from "react-icons/fi";
-import { useTranslation } from "next-i18next";
-import classNames from "classnames";
+import useSWR from "swr";
+import { SettingsContext } from "utils/contexts/settings";
 
 import Error from "../widget/error";
 import Resource from "../widget/resource";
 import Resources from "../widget/resources";
 import WidgetLabel from "../widget/widget_label";
-
-import { SettingsContext } from "utils/contexts/settings";
 
 const cpuSensorLabels = ["cpu_thermal", "Core", "Tctl"];
 
@@ -21,6 +20,7 @@ function convertToFahrenheit(t) {
 export default function Widget({ options }) {
   const { t, i18n } = useTranslation();
   const { settings } = useContext(SettingsContext);
+  const diskUnits = options.diskUnits === "bbytes" ? "common.bbytes" : "common.bytes";
 
   const { data, error } = useSWR(
     `/api/widgets/glances?${new URLSearchParams({ lang: i18n.language, ...options }).toString()}`,
@@ -132,9 +132,9 @@ export default function Widget({ options }) {
         <Resource
           key={`disk_${disk.mnt_point ?? disk.device_name}`}
           icon={FiHardDrive}
-          value={t("common.bytes", { value: disk.free })}
+          value={t(diskUnits, { value: disk.free })}
           label={t("glances.free")}
-          expandedValue={t("common.bytes", { value: disk.size })}
+          expandedValue={t(diskUnits, { value: disk.size })}
           expandedLabel={t("glances.total")}
           percentage={disk.percent}
           expanded={options.expanded}

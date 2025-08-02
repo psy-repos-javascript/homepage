@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState, useContext } from "react";
-import dynamic from "next/dynamic";
+import Container from "components/services/widget/container";
 import { DateTime } from "luxon";
 import { useTranslation } from "next-i18next";
-
-import Monthly from "./monthly";
-import Agenda from "./agenda";
-
-import Container from "components/services/widget/container";
+import dynamic from "next/dynamic";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { SettingsContext } from "utils/contexts/settings";
+
+import Agenda from "./agenda";
+import Monthly from "./monthly";
 
 const colorVariants = {
   // https://tailwindcss.com/docs/content-configuration#dynamic-class-names
@@ -41,7 +40,8 @@ export default function Component({ service }) {
   const { i18n } = useTranslation();
   const [showDate, setShowDate] = useState(null);
   const [events, setEvents] = useState({});
-  const currentDate = DateTime.now().setLocale(i18n.language).startOf("day");
+  const nowDate = DateTime.now().setLocale(i18n.language);
+  const currentDate = widget?.timezone ? nowDate.setZone(widget?.timezone).startOf("day") : nowDate;
   const { settings } = useContext(SettingsContext);
 
   useEffect(() => {
@@ -52,15 +52,18 @@ export default function Component({ service }) {
 
   // params for API fetch
   const params = useMemo(() => {
-    if (!showDate) {
-      return {};
+    const constructedParams = {
+      start: "",
+      end: "",
+      unmonitored: false,
+    };
+
+    if (showDate) {
+      constructedParams.start = showDate.minus({ months: 3 }).toFormat("yyyy-MM-dd");
+      constructedParams.end = showDate.plus({ months: 3 }).toFormat("yyyy-MM-dd");
     }
 
-    return {
-      start: showDate.minus({ months: 3 }).toFormat("yyyy-MM-dd"),
-      end: showDate.plus({ months: 3 }).toFormat("yyyy-MM-dd"),
-      unmonitored: "false",
-    };
+    return constructedParams;
   }, [showDate]);
 
   // Load active integrations
@@ -90,6 +93,7 @@ export default function Component({ service }) {
                 params={params}
                 setEvents={setEvents}
                 hideErrors={settings.hideErrors}
+                timezone={widget?.timezone}
                 className="fixed bottom-0 left-0 bg-red-500 w-screen h-12"
               />
             );
@@ -103,6 +107,7 @@ export default function Component({ service }) {
             events={events}
             showDate={showDate}
             setShowDate={setShowDate}
+            currentDate={currentDate}
             className="flex"
           />
         )}
