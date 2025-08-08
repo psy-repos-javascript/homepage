@@ -1,7 +1,7 @@
+import Block from "components/services/widget/block";
+import Container from "components/services/widget/container";
 import { useTranslation } from "next-i18next";
 
-import Container from "components/services/widget/container";
-import Block from "components/services/widget/block";
 import useWidgetAPI from "utils/proxy/use-widget-api";
 
 export default function Component({ service }) {
@@ -20,6 +20,10 @@ export default function Component({ service }) {
     : statsData?.data?.find((s) => s.name === "default");
 
   if (!defaultSite) {
+    if (widget.site) {
+      return <Container service={service} error={{ message: `Site '${widget.site}' not found` }} />;
+    }
+
     return (
       <Container service={service}>
         <Block label="unifi.uptime" />
