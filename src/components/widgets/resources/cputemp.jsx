@@ -1,15 +1,15 @@
-import useSWR from "swr";
-import { FaThermometerHalf } from "react-icons/fa";
 import { useTranslation } from "next-i18next";
+import { FaThermometerHalf } from "react-icons/fa";
+import useSWR from "swr";
 
-import Resource from "../widget/resource";
 import Error from "../widget/error";
+import Resource from "../widget/resource";
 
 function convertToFahrenheit(t) {
   return (t * 9) / 5 + 32;
 }
 
-export default function CpuTemp({ expanded, units, refresh = 1500 }) {
+export default function CpuTemp({ expanded, units, refresh = 1500, tempmin = 0, tempmax = -1 }) {
   const { t } = useTranslation();
 
   const { data, error } = useSWR(`/api/widgets/resources?type=cputemp`, {
@@ -39,7 +39,12 @@ export default function CpuTemp({ expanded, units, refresh = 1500 }) {
   }
   const unit = units === "imperial" ? "fahrenheit" : "celsius";
   mainTemp = unit === "celsius" ? mainTemp : convertToFahrenheit(mainTemp);
-  const maxTemp = unit === "celsius" ? data.cputemp.max : convertToFahrenheit(data.cputemp.max);
+
+  const minTemp = tempmin < mainTemp ? tempmin : mainTemp;
+  let maxTemp = tempmax;
+  if (maxTemp < minTemp) {
+    maxTemp = unit === "celsius" ? data.cputemp.max : convertToFahrenheit(data.cputemp.max);
+  }
 
   return (
     <Resource
@@ -58,7 +63,7 @@ export default function CpuTemp({ expanded, units, refresh = 1500 }) {
         unit,
       })}
       expandedLabel={t("resources.max")}
-      percentage={Math.round((mainTemp / maxTemp) * 100)}
+      percentage={Math.round(((mainTemp - minTemp) / (maxTemp - minTemp)) * 100)}
       expanded={expanded}
     />
   );

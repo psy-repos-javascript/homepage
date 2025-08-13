@@ -8,6 +8,7 @@ The Kubernetes connectivity has the following requirements:
 - Kubernetes 1.19+
 - Metrics Service
 - An Ingress controller
+  - Optionally: Gateway-API
 
 The Kubernetes connection is configured in the `kubernetes.yaml` file. There are 3 modes to choose from:
 
@@ -17,6 +18,22 @@ The Kubernetes connection is configured in the `kubernetes.yaml` file. There are
 
 ```yaml
 mode: default
+```
+
+To configure Kubernetes gateway-api, ingress or ingressRoute service discovery, add one or multiple of the following settings.
+
+Example settings:
+
+```yaml
+ingress: true # default, enable ingress only
+```
+
+or
+
+```yaml
+ingress: true # default, enable ingress
+traefik: true # enable traefik ingressRoute
+gateway: true # enable gateway-api
 ```
 
 ## Services
@@ -36,7 +53,7 @@ Inside of the service you'd like to connect to a pod:
 
 The `app` field is used to create a label selector, in this example case it would match pods with the label: `app.kubernetes.io/name=emby`.
 
-Sometimes this is insufficient for complex or atypical application deployments. In these cases, the `pod-selector` field can be used. Any field selector can be used with it, so it allows for some very powerful selection capabilities.
+Sometimes this is insufficient for complex or atypical application deployments. In these cases, the `podSelector` field can be used. Any field selector can be used with it, so it allows for some very powerful selection capabilities.
 
 For instance, it can be utilized to roll multiple underlying deployments under one application to see a high-level aggregate:
 
@@ -47,7 +64,7 @@ For instance, it can be utilized to roll multiple underlying deployments under o
     description: Matrix Synapse Powered Chat
     app: matrix-element
     namespace: comms
-    pod-selector: >-
+    podSelector: >-
       app.kubernetes.io/instance in (
           matrix-element,
           matrix-media-repo,
@@ -58,7 +75,7 @@ For instance, it can be utilized to roll multiple underlying deployments under o
 
 !!! note
 
-    A blank string as a pod-selector does not deactivate it, but will actually select all pods in the namespace. This is a useful way to capture the resource usage of a complex application siloed to a single namespace, like Longhorn.
+    A blank string as a podSelector does not deactivate it, but will actually select all pods in the namespace. This is a useful way to capture the resource usage of a complex application siloed to a single namespace, like Longhorn.
 
 ## Automatic Service Discovery
 
@@ -79,6 +96,7 @@ metadata:
     gethomepage.dev/widget.url: "https://emby.example.com"
     gethomepage.dev/pod-selector: ""
     gethomepage.dev/weight: 10 # optional
+    gethomepage.dev/instance: "public" # optional
 spec:
   rules:
     - host: emby.example.com
@@ -94,6 +112,12 @@ spec:
 ```
 
 When the Kubernetes cluster connection has been properly configured, this service will be automatically discovered and added to your Homepage. **You do not need to specify the `namespace` or `app` values, as they will be automatically inferred.**
+
+If you are using multiple instances of homepage, an `instance` annotation can be specified to limit services to a specific instance. If no instance is provided, the service will be visible on all instances.
+
+If you have a single service that needs to be shown on multiple specific instances of homepage (but not on all of them), the service can be annotated by multiple `instance.name` annotations, where `name` can be the names of your specific multiple homepage instances. For example, a service that is annotated with `gethomepage.dev/instance.public: ""` and `gethomepage.dev/instance.internal: ""` will be shown on `public` and `internal` homepage instances.
+
+Use the `gethomepage.dev/pod-selector` selector to specify the pod used for the health check. For example, a service that is annotated with `gethomepage.dev/pod-selector: app.kubernetes.io/name=deployment` would link to a pod with the label `app.kubernetes.io/name: deployment`.
 
 ### Traefik IngressRoute support
 
@@ -116,6 +140,7 @@ metadata:
     gethomepage.dev/widget.url: "https://emby.example.com"
     gethomepage.dev/pod-selector: ""
     gethomepage.dev/weight: 10 # optional
+    gethomepage.dev/instance: "public" # optional
 spec:
   entryPoints:
     - websecure
@@ -133,6 +158,22 @@ spec:
 ```
 
 If the `href` attribute is not present, Homepage will ignore the specific IngressRoute.
+
+### Gateway API HttpRoute support
+
+Homepage also features automatic service discovery for Gateway API. Service definitions are read by annotating the HttpRoute custom resource definition and are indentical to the Ingress example as defined in [Automatic Service Discovery](#automatic-service-discovery).
+
+To enable Gateway API HttpRoute update `kubernetes.yaml` to include:
+
+```
+gateway: true # enable gateway-api
+```
+
+#### Using the unoffocial helm chart?
+
+If you are using the unofficial helm chart ensure that the `ClusterRole` has required permissions for `gateway.networking.k8s.io`.
+
+See [ClusterRole and ClusterRoleBinding](../installation/k8s.md#clusterrole-and-clusterrolebinding)
 
 ## Caveats
 

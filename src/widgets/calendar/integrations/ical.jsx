@@ -1,24 +1,73 @@
+import ICAL from "ical.js";
 import { DateTime } from "luxon";
-import { parseString } from "cal-parser";
-import { useEffect } from "react";
 import { useTranslation } from "next-i18next";
-import { RRule } from "rrule";
+import { useEffect } from "react";
 
-import useWidgetAPI from "../../../utils/proxy/use-widget-api";
 import Error from "../../../components/services/widget/error";
+import useWidgetAPI from "../../../utils/proxy/use-widget-api";
 
-export default function Integration({ config, params, setEvents, hideErrors }) {
+function simpleHash(str) {
+  let hash = 0;
+  const prime = 31;
+
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * prime + str.charCodeAt(i)) % 2_147_483_647;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
+export default function Integration({ config, params, setEvents, hideErrors, timezone }) {
   const { t } = useTranslation();
   const { data: icalData, error: icalError } = useWidgetAPI(config, config.name, {
     refreshInterval: 300000, // 5 minutes
   });
 
   useEffect(() => {
-    let parsedIcal;
+    const { showName = false } = config?.params || {};
+    let events = [];
 
     if (!icalError && icalData && !icalData.error) {
-      parsedIcal = parseString(icalData.data);
-      if (parsedIcal.events.length === 0) {
+      if (!icalData.data) {
+        icalData.error = { message: `'${config.name}': ${t("calendar.errorWhenLoadingData")}` };
+        return;
+      }
+
+      const jCal = ICAL.parse(icalData.data);
+      const vCalendar = new ICAL.Component(jCal);
+
+      const buildEvent = (event, type) => {
+        return {
+          id: event.getFirstPropertyValue("uid"),
+          type,
+          title: event.getFirstPropertyValue("summary"),
+          rrule: event.getFirstPropertyValue("rrule"),
+          dtstart:
+            event.getFirstPropertyValue("dtstart") ||
+            event.getFirstPropertyValue("due") ||
+            event.getFirstPropertyValue("completed") ||
+            ICAL.Time.now(), // handles events without a date
+          dtend:
+            event.getFirstPropertyValue("dtend") ||
+            event.getFirstPropertyValue("due") ||
+            event.getFirstPropertyValue("completed") ||
+            ICAL.Time.now(), // handles events without a date
+          location: event.getFirstPropertyValue("location"),
+          status: event.getFirstPropertyValue("status"),
+          url: event.getFirstPropertyValue("url"),
+        };
+      };
+
+      const getEvents = () => {
+        const vEvents = vCalendar.getAllSubcomponents("vevent").map((event) => buildEvent(event, "vevent"));
+
+        const vTodos = vCalendar.getAllSubcomponents("vtodo").map((todo) => buildEvent(todo, "vtodo"));
+
+        return [...vEvents, ...vTodos];
+      };
+
+      events = getEvents();
+      if (events.length === 0) {
         icalData.error = { message: `'${config.name}': ${t("calendar.noEventsFound")}` };
       }
     }
@@ -26,48 +75,72 @@ export default function Integration({ config, params, setEvents, hideErrors }) {
     const startDate = DateTime.fromISO(params.start);
     const endDate = DateTime.fromISO(params.end);
 
-    if (icalError || !parsedIcal || !startDate.isValid || !endDate.isValid) {
+    if (icalError || events.length === 0 || !startDate.isValid || !endDate.isValid) {
       return;
     }
 
-    const eventsToAdd = {};
-    const events = parsedIcal?.getEventsBetweenDates(startDate.toJSDate(), endDate.toJSDate());
+    const rangeStart = ICAL.Time.fromJSDate(startDate.toJSDate());
+    const rangeEnd = ICAL.Time.fromJSDate(endDate.toJSDate());
 
-    events?.forEach((event) => {
-      let title = `${event?.summary?.value}`;
-      if (config?.params?.showName) {
-        title = `${config.name}: ${title}`;
-      }
-
-      const eventToAdd = (date, i, type) => {
-        const duration = event.dtend.value - event.dtstart.value;
-        const days = duration / (1000 * 60 * 60 * 24);
-
-        for (let j = 0; j < days; j += 1) {
-          eventsToAdd[`${event?.uid?.value}${i}${j}${type}`] = {
-            title,
-            date: DateTime.fromJSDate(date).plus({ days: j }),
-            color: config?.color ?? "zinc",
-            isCompleted: DateTime.fromJSDate(date) < DateTime.now(),
-            additional: event.location?.value,
-            type: "ical",
-          };
+    const getOcurrencesFromRange = (event) => {
+      if (!event.rrule) {
+        if (event.dtstart.compare(rangeStart) >= 0 && event.dtend.compare(rangeEnd) <= 0) {
+          return [event.dtstart];
         }
-      };
 
-      if (event?.recurrenceRule?.options) {
-        const rule = new RRule(event.recurrenceRule.options);
-        const recurringEvents = rule.between(startDate.toJSDate(), endDate.toJSDate());
-
-        recurringEvents.forEach((date, i) => eventToAdd(date, i, "recurring"));
-        return;
+        return [];
       }
 
-      event.matchingDates.forEach((date, i) => eventToAdd(date, i, "single"));
+      const iterator = event.rrule.iterator(event.dtstart);
+
+      const occurrences = [];
+      for (let next = iterator.next(); next && next.compare(rangeEnd) < 0; next = iterator.next()) {
+        if (next.compare(rangeStart) < 0) {
+          continue;
+        }
+
+        occurrences.push(next.clone());
+      }
+
+      return occurrences;
+    };
+
+    const eventsToAdd = [];
+    events.forEach((event, index) => {
+      const occurrences = getOcurrencesFromRange(event);
+
+      occurrences.forEach((icalDate) => {
+        const date = icalDate.toJSDate();
+
+        const hash = simpleHash(`${event.id}-${event.title}-${index}-${date.toString()}`);
+
+        let title = event.title;
+        if (showName) {
+          title = `${config.name}: ${title}`;
+        }
+
+        const getIsCompleted = () => {
+          if (event.type === "vtodo") {
+            return event.status === "COMPLETED";
+          }
+
+          return DateTime.fromJSDate(date) < DateTime.now();
+        };
+
+        eventsToAdd[hash] = {
+          title,
+          date: DateTime.fromJSDate(date),
+          color: config?.color ?? "zinc",
+          isCompleted: getIsCompleted(),
+          additional: event.location,
+          type: "ical",
+          url: event.url,
+        };
+      });
     });
 
     setEvents((prevEvents) => ({ ...prevEvents, ...eventsToAdd }));
-  }, [icalData, icalError, config, params, setEvents, t]);
+  }, [icalData, icalError, config, params, setEvents, timezone, t]);
 
   const error = icalError ?? icalData?.error;
   return error && !hideErrors && <Error error={{ message: `${config.type}: ${error.message ?? error}` }} />;
