@@ -3,7 +3,9 @@
 import { createUnzip, constants as zlibConstants } from "node:zlib";
 
 import { http, https } from "follow-redirects";
+import cache from "memory-cache";
 
+import { sanitizeErrorURL } from "./api-helpers";
 import { addCookieToJar, setCookieHeader } from "./cookie-jar";
 
 import createLogger from "utils/logger";
@@ -44,7 +46,7 @@ function handleRequest(requestor, url, params) {
 
         // zlib errors
         responseContent.on("error", (e) => {
-          logger.error(e);
+          if (e) logger.error(e);
           responseContent = response; // fallback
         });
         response.pipe(responseContent);
@@ -80,30 +82,53 @@ export function httpRequest(url, params) {
   return handleRequest(http, url, params);
 }
 
+export async function cachedRequest(url, duration = 5, ua = "homepage") {
+  const cached = cache.get(url);
+
+  if (cached) {
+    return cached;
+  }
+
+  const options = {
+    headers: {
+      "User-Agent": ua,
+      Accept: "application/json",
+    },
+  };
+  let [, , data] = await httpProxy(url, options);
+  if (Buffer.isBuffer(data)) {
+    try {
+      data = JSON.parse(Buffer.from(data).toString());
+    } catch (e) {
+      logger.debug("Error parsing cachedRequest data for %s: %s %s", url, Buffer.from(data).toString(), e);
+      data = Buffer.from(data).toString();
+    }
+  }
+  cache.put(url, data, duration * 1000 * 60);
+  return data;
+}
+
 export async function httpProxy(url, params = {}) {
   const constructedUrl = new URL(url);
+  const disableIpv6 = process.env.HOMEPAGE_PROXY_DISABLE_IPV6 === "true";
+  const agentOptions = disableIpv6 ? { family: 4, autoSelectFamily: false } : {};
 
   let request = null;
   if (constructedUrl.protocol === "https:") {
     request = httpsRequest(constructedUrl, {
-      agent: new https.Agent({
-        rejectUnauthorized: false,
-        autoSelectFamily: true,
-      }),
+      agent: new https.Agent({ ...agentOptions, rejectUnauthorized: false }),
       ...params,
     });
   } else {
     request = httpRequest(constructedUrl, {
-      agent: new http.Agent({
-        autoSelectFamily: true,
-      }),
+      agent: new http.Agent(agentOptions),
       ...params,
     });
   }
 
   try {
     const [status, contentType, data, responseHeaders] = await request;
-    return [status, contentType, data, responseHeaders];
+    return [status, contentType, data, responseHeaders, params];
   } catch (err) {
     logger.error(
       "Error calling %s//%s%s%s...",
@@ -112,7 +137,12 @@ export async function httpProxy(url, params = {}) {
       constructedUrl.port ? `:${constructedUrl.port}` : "",
       constructedUrl.pathname,
     );
-    logger.error(err);
-    return [500, "application/json", { error: { message: err?.message ?? "Unknown error", url, rawError: err } }, null];
+    if (err) logger.error(err);
+    return [
+      500,
+      "application/json",
+      { error: { message: err?.message ?? "Unknown error", url: sanitizeErrorURL(url), rawError: err } },
+      null,
+    ];
   }
 }

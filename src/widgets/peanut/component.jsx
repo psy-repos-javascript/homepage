@@ -1,7 +1,7 @@
+import Block from "components/services/widget/block";
+import Container from "components/services/widget/container";
 import { useTranslation } from "next-i18next";
 
-import Container from "components/services/widget/container";
-import Block from "components/services/widget/block";
 import useWidgetAPI from "utils/proxy/use-widget-api";
 
 export default function Component({ service }) {
@@ -22,6 +22,17 @@ export default function Component({ service }) {
         <Block label="peanut.ups_status" />
       </Container>
     );
+  }
+
+  // backwards compatibility with peanut v1
+  if ("battery.charge" in upsData) {
+    upsData.battery_charge = upsData["battery.charge"];
+  }
+  if ("ups.load" in upsData) {
+    upsData.ups_load = upsData["ups.load"];
+  }
+  if ("ups.status" in upsData) {
+    upsData.ups_status = upsData["ups.status"];
   }
 
   let status;

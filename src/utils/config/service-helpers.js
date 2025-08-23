@@ -1,17 +1,53 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-import yaml from "js-yaml";
 import Docker from "dockerode";
-import { CustomObjectsApi, NetworkingV1Api, ApiextensionsV1Api } from "@kubernetes/client-node";
+import yaml from "js-yaml";
 
-import createLogger from "utils/logger";
 import checkAndCopyConfig, { CONF_DIR, getSettings, substituteEnvironmentVars } from "utils/config/config";
 import getDockerArguments from "utils/config/docker";
-import getKubeConfig from "utils/config/kubernetes";
+import { getKubeConfig } from "utils/config/kubernetes";
 import * as shvl from "utils/config/shvl";
+import kubernetes from "utils/kubernetes/export";
+import createLogger from "utils/logger";
 
 const logger = createLogger("service-helpers");
+
+function parseServicesToGroups(services) {
+  if (!services) {
+    return [];
+  }
+
+  // map easy to write YAML objects into easy to consume JS arrays
+  return services.map((serviceGroup) => {
+    const name = Object.keys(serviceGroup)[0];
+    let groups = [];
+    const serviceGroupServices = [];
+    serviceGroup[name].forEach((entries) => {
+      const entryName = Object.keys(entries)[0];
+      if (!entries[entryName]) {
+        logger.warn(`Error parsing service "${entryName}" from config. Ensure required fields are present.`);
+        return;
+      }
+      if (Array.isArray(entries[entryName])) {
+        groups = groups.concat(parseServicesToGroups([{ [entryName]: entries[entryName] }]));
+      } else {
+        serviceGroupServices.push({
+          name: entryName,
+          ...entries[entryName],
+          weight: entries[entryName].weight || serviceGroupServices.length * 100, // default weight
+          type: "service",
+        });
+      }
+    });
+    return {
+      name,
+      type: "group",
+      services: serviceGroupServices,
+      groups,
+    };
+  });
+}
 
 export async function servicesFromConfig() {
   checkAndCopyConfig("services.yaml");
@@ -20,31 +56,7 @@ export async function servicesFromConfig() {
   const rawFileContents = await fs.readFile(servicesYaml, "utf8");
   const fileContents = substituteEnvironmentVars(rawFileContents);
   const services = yaml.load(fileContents);
-
-  if (!services) {
-    return [];
-  }
-
-  // map easy to write YAML objects into easy to consume JS arrays
-  const servicesArray = services.map((servicesGroup) => ({
-    name: Object.keys(servicesGroup)[0],
-    services: servicesGroup[Object.keys(servicesGroup)[0]].map((entries) => ({
-      name: Object.keys(entries)[0],
-      ...entries[Object.keys(entries)[0]],
-      type: "service",
-    })),
-  }));
-
-  // add default weight to services based on their position in the configuration
-  servicesArray.forEach((group, groupIndex) => {
-    group.services.forEach((service, serviceIndex) => {
-      if (!service.weight) {
-        servicesArray[groupIndex].services[serviceIndex].weight = (serviceIndex + 1) * 100;
-      }
-    });
-  });
-
-  return servicesArray;
+  return parseServicesToGroups(services);
 }
 
 export async function servicesFromDocker() {
@@ -98,15 +110,31 @@ export async function servicesFromDocker() {
                   type: "service",
                 };
               }
-              shvl.set(constructedService, value, substituteEnvironmentVars(containerLabels[label]));
+              let substitutedVal = substituteEnvironmentVars(containerLabels[label]);
+              if (value === "widget.version") {
+                substitutedVal = parseInt(substitutedVal, 10);
+              }
+              shvl.set(constructedService, value, substitutedVal);
             }
           });
+
+          if (constructedService && (!constructedService.name || !constructedService.group)) {
+            logger.error(
+              `Error constructing service using homepage labels for container '${containerName.replace(
+                /^\//,
+                "",
+              )}'. Ensure required labels are present.`,
+            );
+            return null;
+          }
 
           return constructedService;
         });
 
         return { server: serverName, services: discovered.filter((filteredService) => filteredService) };
       } catch (e) {
+        logger.error("Error getting services from Docker server '%s': %s", serverName, e);
+
         // a server failed, but others may succeed
         return { server: serverName, services: [] };
       }
@@ -139,36 +167,8 @@ export async function servicesFromDocker() {
   return mappedServiceGroups;
 }
 
-function getUrlFromIngress(ingress) {
-  const urlHost = ingress.spec.rules[0].host;
-  const urlPath = ingress.spec.rules[0].http.paths[0].path;
-  const urlSchema = ingress.spec.tls ? "https" : "http";
-  return `${urlSchema}://${urlHost}${urlPath}`;
-}
-
-export async function checkCRD(kc, name) {
-  const apiExtensions = kc.makeApiClient(ApiextensionsV1Api);
-  const exist = await apiExtensions
-    .readCustomResourceDefinitionStatus(name)
-    .then(() => true)
-    .catch(async (error) => {
-      if (error.statusCode === 403) {
-        logger.error(
-          "Error checking if CRD %s exists. Make sure to add the following permission to your RBAC: %d %s %s",
-          name,
-          error.statusCode,
-          error.body.message,
-        );
-      }
-      return false;
-    });
-
-  return exist;
-}
-
 export async function servicesFromKubernetes() {
-  const ANNOTATION_BASE = "gethomepage.dev";
-  const ANNOTATION_WIDGET_BASE = `${ANNOTATION_BASE}/widget.`;
+  const { instanceName } = getSettings();
 
   checkAndCopyConfig("kubernetes.yaml");
 
@@ -177,141 +177,50 @@ export async function servicesFromKubernetes() {
     if (!kc) {
       return [];
     }
-    const networking = kc.makeApiClient(NetworkingV1Api);
-    const crd = kc.makeApiClient(CustomObjectsApi);
 
-    const ingressList = await networking
-      .listIngressForAllNamespaces(null, null, null, null)
-      .then((response) => response.body)
-      .catch((error) => {
-        logger.error("Error getting ingresses: %d %s %s", error.statusCode, error.body, error.response);
-        return null;
-      });
+    // resource lists
+    const [ingressList, traefikIngressList, httpRouteList] = await Promise.all([
+      kubernetes.listIngress(),
+      kubernetes.listTraefikIngress(),
+      kubernetes.listHttpRoute(),
+    ]);
 
-    const traefikContainoExists = await checkCRD(kc, "ingressroutes.traefik.containo.us");
-    const traefikExists = await checkCRD(kc, "ingressroutes.traefik.io");
+    const resources = [...ingressList, ...traefikIngressList, ...httpRouteList];
 
-    const traefikIngressListContaino = await crd
-      .listClusterCustomObject("traefik.containo.us", "v1alpha1", "ingressroutes")
-      .then((response) => response.body)
-      .catch(async (error) => {
-        if (traefikContainoExists) {
-          logger.error(
-            "Error getting traefik ingresses from traefik.containo.us: %d %s %s",
-            error.statusCode,
-            error.body,
-            error.response,
-          );
-        }
-
-        return [];
-      });
-
-    const traefikIngressListIo = await crd
-      .listClusterCustomObject("traefik.io", "v1alpha1", "ingressroutes")
-      .then((response) => response.body)
-      .catch(async (error) => {
-        if (traefikExists) {
-          logger.error(
-            "Error getting traefik ingresses from traefik.io: %d %s %s",
-            error.statusCode,
-            error.body,
-            error.response,
-          );
-        }
-
-        return [];
-      });
-
-    const traefikIngressList = [...(traefikIngressListContaino?.items ?? []), ...(traefikIngressListIo?.items ?? [])];
-
-    if (traefikIngressList.length > 0) {
-      const traefikServices = traefikIngressList.filter(
-        (ingress) => ingress.metadata.annotations && ingress.metadata.annotations[`${ANNOTATION_BASE}/href`],
-      );
-      ingressList.items.push(...traefikServices);
-    }
-
-    if (!ingressList) {
+    if (!resources) {
       return [];
     }
-    const services = ingressList.items
-      .filter(
-        (ingress) =>
-          ingress.metadata.annotations && ingress.metadata.annotations[`${ANNOTATION_BASE}/enabled`] === "true",
-      )
-      .map((ingress) => {
-        let constructedService = {
-          app: ingress.metadata.annotations[`${ANNOTATION_BASE}/app`] || ingress.metadata.name,
-          namespace: ingress.metadata.namespace,
-          href: ingress.metadata.annotations[`${ANNOTATION_BASE}/href`] || getUrlFromIngress(ingress),
-          name: ingress.metadata.annotations[`${ANNOTATION_BASE}/name`] || ingress.metadata.name,
-          group: ingress.metadata.annotations[`${ANNOTATION_BASE}/group`] || "Kubernetes",
-          weight: ingress.metadata.annotations[`${ANNOTATION_BASE}/weight`] || "0",
-          icon: ingress.metadata.annotations[`${ANNOTATION_BASE}/icon`] || "",
-          description: ingress.metadata.annotations[`${ANNOTATION_BASE}/description`] || "",
-          external: false,
-          type: "service",
-        };
-        if (ingress.metadata.annotations[`${ANNOTATION_BASE}/external`]) {
-          constructedService.external =
-            String(ingress.metadata.annotations[`${ANNOTATION_BASE}/external`]).toLowerCase() === "true";
-        }
-        if (ingress.metadata.annotations[`${ANNOTATION_BASE}/pod-selector`] !== undefined) {
-          constructedService.podSelector = ingress.metadata.annotations[`${ANNOTATION_BASE}/pod-selector`];
-        }
-        if (ingress.metadata.annotations[`${ANNOTATION_BASE}/ping`]) {
-          constructedService.ping = ingress.metadata.annotations[`${ANNOTATION_BASE}/ping`];
-        }
-        if (ingress.metadata.annotations[`${ANNOTATION_BASE}/siteMonitor`]) {
-          constructedService.siteMonitor = ingress.metadata.annotations[`${ANNOTATION_BASE}/siteMonitor`];
-        }
-        if (ingress.metadata.annotations[`${ANNOTATION_BASE}/statusStyle`]) {
-          constructedService.statusStyle = ingress.metadata.annotations[`${ANNOTATION_BASE}/statusStyle`];
-        }
-        Object.keys(ingress.metadata.annotations).forEach((annotation) => {
-          if (annotation.startsWith(ANNOTATION_WIDGET_BASE)) {
-            shvl.set(
-              constructedService,
-              annotation.replace(`${ANNOTATION_BASE}/`, ""),
-              ingress.metadata.annotations[annotation],
-            );
-          }
-        });
+    const services = await Promise.all(
+      resources
+        .filter((resource) => kubernetes.isDiscoverable(resource, instanceName))
+        .map(async (resource) => kubernetes.constructedServiceFromResource(resource)),
+    );
 
-        try {
-          constructedService = JSON.parse(substituteEnvironmentVars(JSON.stringify(constructedService)));
-        } catch (e) {
-          logger.error("Error attempting k8s environment variable substitution.");
-        }
+    // map service groups
+    const mappedServiceGroups = services.reduce((groups, serverService) => {
+      let serverGroup = groups.find((group) => group.name === serverService.group);
 
-        return constructedService;
-      });
-
-    const mappedServiceGroups = [];
-
-    services.forEach((serverService) => {
-      let serverGroup = mappedServiceGroups.find((searchedGroup) => searchedGroup.name === serverService.group);
       if (!serverGroup) {
-        mappedServiceGroups.push({
+        serverGroup = {
           name: serverService.group,
           services: [],
-        });
-        serverGroup = mappedServiceGroups[mappedServiceGroups.length - 1];
+        };
+        groups.push(serverGroup);
       }
 
-      const { name: serviceName, group: serverServiceGroup, ...pushedService } = serverService;
-      const result = {
+      const { name: serviceName, group: _, ...pushedService } = serverService;
+
+      serverGroup.services.push({
         name: serviceName,
         ...pushedService,
-      };
+      });
 
-      serverGroup.services.push(result);
-    });
+      return groups;
+    }, []);
 
     return mappedServiceGroups;
   } catch (e) {
-    logger.error(e);
+    if (e) logger.error(e);
     throw e;
   }
 }
@@ -333,8 +242,12 @@ export function cleanServiceGroups(groups) {
       if (typeof cleanedService.weight !== "number") {
         cleanedService.weight = 0;
       }
-
+      if (!cleanedService.widgets) cleanedService.widgets = [];
       if (cleanedService.widget) {
+        cleanedService.widgets.push(cleanedService.widget);
+        delete cleanedService.widget;
+      }
+      cleanedService.widgets = cleanedService.widgets.map((widgetData, index) => {
         // whitelisted set of keys to pass to the frontend
         // alphabetical, grouped by widget(s)
         const {
@@ -347,6 +260,9 @@ export function cleanServiceGroups(groups) {
           repositoryId,
           userEmail,
 
+          // beszel
+          systemId,
+
           // calendar
           firstDayInWeek,
           integrations,
@@ -354,6 +270,7 @@ export function cleanServiceGroups(groups) {
           showTime,
           previousDays,
           view,
+          timezone,
 
           // coinmarketcap
           currency,
@@ -363,6 +280,10 @@ export function cleanServiceGroups(groups) {
 
           // customapi
           mappings,
+          display,
+
+          // deluge, qbittorrent
+          enableLeechProgress,
 
           // diskstation
           volume,
@@ -374,14 +295,36 @@ export function cleanServiceGroups(groups) {
           // emby, jellyfin
           enableBlocks,
           enableNowPlaying,
+          enableMediaControl,
+
+          // emby, jellyfin, tautulli
+          enableUser,
+          expandOneStreamToTwoRows,
+          showEpisodeNumber,
+
+          // frigate
+          enableRecentEvents,
+
+          // gamedig
+          gameToken,
+
+          // authentik, beszel, glances, immich, komga, mealie, pihole, pfsense, speedtest
+          version,
 
           // glances
           chart,
           metric,
           pointsLimit,
+          diskUnits,
 
-          // glances, customapi, iframe
+          // glances, customapi, iframe, prometheusmetric
           refreshInterval,
+
+          // hdhomerun
+          tuner,
+
+          // healthchecks
+          uuid,
 
           // iframe
           allowFullscreen,
@@ -392,6 +335,13 @@ export function cleanServiceGroups(groups) {
           referrerPolicy,
           src,
 
+          // jellystat
+          days,
+
+          // komodo
+          showSummary,
+          showStacks,
+
           // kopia
           snapshotHost,
           snapshotPath,
@@ -401,6 +351,9 @@ export function cleanServiceGroups(groups) {
           namespace,
           podSelector,
 
+          // lubelogger
+          vehicleID,
+
           // mjpeg
           fit,
           stream,
@@ -408,131 +361,286 @@ export function cleanServiceGroups(groups) {
           // openmediavault
           method,
 
+          // openwrt
+          interfaceName,
+
           // opnsense, pfsense
           wan,
+
+          // portainer
+          kubernetes,
+
+          // prometheusmetric
+          metrics,
 
           // proxmox
           node,
 
+          // proxmoxbackupserver
+          datastore,
+
+          // speedtest
+          bitratePrecision,
+
           // sonarr, radarr
           enableQueue,
 
+          // stocks
+          watchlist,
+          showUSMarketStatus,
+
+          // truenas
+          enablePools,
+          nasType,
+
           // unifi
           site,
-        } = cleanedService.widget;
+
+          // vikunja
+          enableTaskList,
+
+          // wgeasy
+          threshold,
+
+          // technitium
+          range,
+
+          // spoolman
+          spoolIds,
+
+          // grafana
+          alerts,
+        } = widgetData;
 
         let fieldsList = fields;
         if (typeof fields === "string") {
           try {
-            JSON.parse(fields);
+            fieldsList = JSON.parse(fields);
           } catch (e) {
             logger.error("Invalid fields list detected in config for service '%s'", service.name);
             fieldsList = null;
           }
         }
 
-        cleanedService.widget = {
+        const widget = {
           type,
           fields: fieldsList || null,
           hide_errors: hideErrors || false,
           service_name: service.name,
           service_group: serviceGroup.name,
+          index,
         };
 
         if (type === "azuredevops") {
-          if (userEmail) cleanedService.widget.userEmail = userEmail;
-          if (repositoryId) cleanedService.widget.repositoryId = repositoryId;
+          if (userEmail) widget.userEmail = userEmail;
+          if (repositoryId) widget.repositoryId = repositoryId;
+        }
+
+        if (type === "beszel") {
+          if (systemId) widget.systemId = systemId;
         }
 
         if (type === "coinmarketcap") {
-          if (currency) cleanedService.widget.currency = currency;
-          if (symbols) cleanedService.widget.symbols = symbols;
-          if (slugs) cleanedService.widget.slugs = slugs;
-          if (defaultinterval) cleanedService.widget.defaultinterval = defaultinterval;
+          if (currency) widget.currency = currency;
+          if (symbols) widget.symbols = symbols;
+          if (slugs) widget.slugs = slugs;
+          if (defaultinterval) widget.defaultinterval = defaultinterval;
         }
 
         if (type === "docker") {
-          if (server) cleanedService.widget.server = server;
-          if (container) cleanedService.widget.container = container;
+          if (server) widget.server = server;
+          if (container) widget.container = container;
         }
         if (type === "unifi") {
-          if (site) cleanedService.widget.site = site;
+          if (site) widget.site = site;
+        }
+        if (type === "portainer") {
+          if (kubernetes) widget.kubernetes = !!JSON.parse(kubernetes);
         }
         if (type === "proxmox") {
-          if (node) cleanedService.widget.node = node;
+          if (node) widget.node = node;
+        }
+        if (type === "proxmoxbackupserver") {
+          if (datastore) widget.datastore = datastore;
+        }
+        if (type === "komodo") {
+          if (showSummary !== undefined) widget.showSummary = !!JSON.parse(showSummary);
+          if (showStacks !== undefined) widget.showStacks = !!JSON.parse(showStacks);
         }
         if (type === "kubernetes") {
-          if (namespace) cleanedService.widget.namespace = namespace;
-          if (app) cleanedService.widget.app = app;
-          if (podSelector) cleanedService.widget.podSelector = podSelector;
+          if (namespace) widget.namespace = namespace;
+          if (app) widget.app = app;
+          if (podSelector) widget.podSelector = podSelector;
         }
         if (type === "iframe") {
-          if (src) cleanedService.widget.src = src;
-          if (classes) cleanedService.widget.classes = classes;
-          if (referrerPolicy) cleanedService.widget.referrerPolicy = referrerPolicy;
-          if (allowPolicy) cleanedService.widget.allowPolicy = allowPolicy;
-          if (allowFullscreen) cleanedService.widget.allowFullscreen = allowFullscreen;
-          if (loadingStrategy) cleanedService.widget.loadingStrategy = loadingStrategy;
-          if (allowScrolling) cleanedService.widget.allowScrolling = allowScrolling;
-          if (refreshInterval) cleanedService.widget.refreshInterval = refreshInterval;
+          if (src) widget.src = src;
+          if (classes) widget.classes = classes;
+          if (referrerPolicy) widget.referrerPolicy = referrerPolicy;
+          if (allowPolicy) widget.allowPolicy = allowPolicy;
+          if (allowFullscreen) widget.allowFullscreen = allowFullscreen;
+          if (loadingStrategy) widget.loadingStrategy = loadingStrategy;
+          if (allowScrolling) widget.allowScrolling = allowScrolling;
+          if (refreshInterval) widget.refreshInterval = refreshInterval;
+        }
+        if (["deluge", "qbittorrent"].includes(type)) {
+          if (enableLeechProgress !== undefined) widget.enableLeechProgress = JSON.parse(enableLeechProgress);
         }
         if (["opnsense", "pfsense"].includes(type)) {
-          if (wan) cleanedService.widget.wan = wan;
+          if (wan) widget.wan = wan;
         }
         if (["emby", "jellyfin"].includes(type)) {
-          if (enableBlocks !== undefined) cleanedService.widget.enableBlocks = JSON.parse(enableBlocks);
-          if (enableNowPlaying !== undefined) cleanedService.widget.enableNowPlaying = JSON.parse(enableNowPlaying);
+          if (enableMediaControl !== undefined) widget.enableMediaControl = !!JSON.parse(enableMediaControl);
+          if (enableBlocks !== undefined) widget.enableBlocks = JSON.parse(enableBlocks);
+          if (enableNowPlaying !== undefined) widget.enableNowPlaying = JSON.parse(enableNowPlaying);
+        }
+        if (["emby", "jellyfin", "tautulli"].includes(type)) {
+          if (expandOneStreamToTwoRows !== undefined)
+            widget.expandOneStreamToTwoRows = !!JSON.parse(expandOneStreamToTwoRows);
+          if (showEpisodeNumber !== undefined) widget.showEpisodeNumber = !!JSON.parse(showEpisodeNumber);
+          if (enableUser !== undefined) widget.enableUser = !!JSON.parse(enableUser);
         }
         if (["sonarr", "radarr"].includes(type)) {
-          if (enableQueue !== undefined) cleanedService.widget.enableQueue = JSON.parse(enableQueue);
+          if (enableQueue !== undefined) widget.enableQueue = JSON.parse(enableQueue);
+        }
+        if (type === "truenas") {
+          if (enablePools !== undefined) widget.enablePools = JSON.parse(enablePools);
+          if (nasType !== undefined) widget.nasType = nasType;
         }
         if (["diskstation", "qnap"].includes(type)) {
-          if (volume) cleanedService.widget.volume = volume;
+          if (volume) widget.volume = volume;
+        }
+        if (type === "gamedig") {
+          if (gameToken) widget.gameToken = gameToken;
         }
         if (type === "kopia") {
-          if (snapshotHost) cleanedService.widget.snapshotHost = snapshotHost;
-          if (snapshotPath) cleanedService.widget.snapshotPath = snapshotPath;
+          if (snapshotHost) widget.snapshotHost = snapshotHost;
+          if (snapshotPath) widget.snapshotPath = snapshotPath;
+        }
+        if (
+          [
+            "authentik",
+            "beszel",
+            "glances",
+            "immich",
+            "komga",
+            "mealie",
+            "pfsense",
+            "pihole",
+            "speedtest",
+            "wgeasy",
+            "grafana",
+          ].includes(type)
+        ) {
+          if (version) widget.version = parseInt(version, 10);
         }
         if (type === "glances") {
-          if (metric) cleanedService.widget.metric = metric;
+          if (metric) widget.metric = metric;
           if (chart !== undefined) {
-            cleanedService.widget.chart = chart;
+            widget.chart = chart;
           } else {
-            cleanedService.widget.chart = true;
+            widget.chart = true;
           }
-          if (refreshInterval) cleanedService.widget.refreshInterval = refreshInterval;
-          if (pointsLimit) cleanedService.widget.pointsLimit = pointsLimit;
+          if (refreshInterval) widget.refreshInterval = refreshInterval;
+          if (pointsLimit) widget.pointsLimit = pointsLimit;
+          if (diskUnits) widget.diskUnits = diskUnits;
         }
         if (type === "mjpeg") {
-          if (stream) cleanedService.widget.stream = stream;
-          if (fit) cleanedService.widget.fit = fit;
+          if (stream) widget.stream = stream;
+          if (fit) widget.fit = fit;
         }
         if (type === "openmediavault") {
-          if (method) cleanedService.widget.method = method;
+          if (method) widget.method = method;
+        }
+        if (type === "openwrt") {
+          if (interfaceName) widget.interfaceName = interfaceName;
         }
         if (type === "customapi") {
-          if (mappings) cleanedService.widget.mappings = mappings;
-          if (refreshInterval) cleanedService.widget.refreshInterval = refreshInterval;
+          if (mappings) widget.mappings = mappings;
+          if (display) widget.display = display;
+          if (refreshInterval) widget.refreshInterval = refreshInterval;
         }
         if (type === "calendar") {
-          if (integrations) cleanedService.widget.integrations = integrations;
-          if (firstDayInWeek) cleanedService.widget.firstDayInWeek = firstDayInWeek;
-          if (view) cleanedService.widget.view = view;
-          if (maxEvents) cleanedService.widget.maxEvents = maxEvents;
-          if (previousDays) cleanedService.widget.previousDays = previousDays;
-          if (showTime) cleanedService.widget.showTime = showTime;
+          if (integrations) widget.integrations = integrations;
+          if (firstDayInWeek) widget.firstDayInWeek = firstDayInWeek;
+          if (view) widget.view = view;
+          if (maxEvents) widget.maxEvents = maxEvents;
+          if (previousDays) widget.previousDays = previousDays;
+          if (showTime) widget.showTime = showTime;
+          if (timezone) widget.timezone = timezone;
         }
-      }
-
+        if (type === "hdhomerun") {
+          if (tuner !== undefined) widget.tuner = tuner;
+        }
+        if (type === "healthchecks") {
+          if (uuid !== undefined) widget.uuid = uuid;
+        }
+        if (type === "speedtest") {
+          if (bitratePrecision !== undefined) {
+            widget.bitratePrecision = parseInt(bitratePrecision, 10);
+          }
+        }
+        if (type === "stocks") {
+          if (watchlist) widget.watchlist = watchlist;
+          if (showUSMarketStatus) widget.showUSMarketStatus = showUSMarketStatus;
+        }
+        if (type === "wgeasy") {
+          if (threshold !== undefined) widget.threshold = parseInt(threshold, 10);
+        }
+        if (type === "frigate") {
+          if (enableRecentEvents !== undefined) widget.enableRecentEvents = enableRecentEvents;
+        }
+        if (type === "technitium") {
+          if (range !== undefined) widget.range = range;
+        }
+        if (type === "lubelogger") {
+          if (vehicleID !== undefined) widget.vehicleID = parseInt(vehicleID, 10);
+        }
+        if (type === "vikunja") {
+          if (enableTaskList !== undefined) widget.enableTaskList = !!enableTaskList;
+        }
+        if (type === "prometheusmetric") {
+          if (metrics) widget.metrics = metrics;
+          if (refreshInterval) widget.refreshInterval = refreshInterval;
+        }
+        if (type === "spoolman") {
+          if (spoolIds !== undefined) widget.spoolIds = spoolIds;
+        }
+        if (type === "jellystat") {
+          if (days !== undefined) widget.days = parseInt(days, 10);
+        }
+        if (type === "grafana") {
+          if (alerts) widget.alerts = alerts;
+        }
+        return widget;
+      });
       return cleanedService;
     }),
+    type: serviceGroup.type || "group",
+    groups: serviceGroup.groups ? cleanServiceGroups(serviceGroup.groups) : [],
   }));
+}
+
+export function findGroupByName(groups, name) {
+  // Deep search for a group by name. Using for loop allows for early return
+  for (let i = 0; i < groups.length; i += 1) {
+    const group = groups[i];
+    if (group.name === name) {
+      return group;
+    } else if (group.groups) {
+      const foundGroup = findGroupByName(group.groups, name);
+      if (foundGroup) {
+        foundGroup.parent = group.name;
+        return foundGroup;
+      }
+    }
+  }
+  return null;
 }
 
 export async function getServiceItem(group, service) {
   const configuredServices = await servicesFromConfig();
 
-  const serviceGroup = configuredServices.find((g) => g.name === group);
+  const serviceGroup = findGroupByName(configuredServices, group);
   if (serviceGroup) {
     const serviceEntry = serviceGroup.services.find((s) => s.name === service);
     if (serviceEntry) return serviceEntry;
@@ -540,14 +648,14 @@ export async function getServiceItem(group, service) {
 
   const discoveredServices = await servicesFromDocker();
 
-  const dockerServiceGroup = discoveredServices.find((g) => g.name === group);
+  const dockerServiceGroup = findGroupByName(discoveredServices, group);
   if (dockerServiceGroup) {
     const dockerServiceEntry = dockerServiceGroup.services.find((s) => s.name === service);
     if (dockerServiceEntry) return dockerServiceEntry;
   }
 
   const kubernetesServices = await servicesFromKubernetes();
-  const kubernetesServiceGroup = kubernetesServices.find((g) => g.name === group);
+  const kubernetesServiceGroup = findGroupByName(kubernetesServices, group);
   if (kubernetesServiceGroup) {
     const kubernetesServiceEntry = kubernetesServiceGroup.services.find((s) => s.name === service);
     if (kubernetesServiceEntry) return kubernetesServiceEntry;
@@ -556,12 +664,11 @@ export async function getServiceItem(group, service) {
   return false;
 }
 
-export default async function getServiceWidget(group, service) {
+export default async function getServiceWidget(group, service, index) {
   const serviceItem = await getServiceItem(group, service);
   if (serviceItem) {
-    const { widget } = serviceItem;
-    return widget;
+    const { widget, widgets } = serviceItem;
+    return index > -1 && widgets ? widgets[index] : widget;
   }
-
   return false;
 }

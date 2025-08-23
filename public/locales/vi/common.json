@@ -11,7 +11,14 @@
         "percent": "{{value, percent}}",
         "number": "{{value, number}}",
         "ms": "{{value, number}}",
-        "date": "{{value, date}}"
+        "date": "{{value, date}}",
+        "relativeDate": "{{value, relativeDate}}",
+        "duration": "{{value, duration}}",
+        "months": "mo",
+        "days": "d",
+        "hours": "h",
+        "minutes": "m",
+        "seconds": "s"
     },
     "widget": {
         "missing_type": "Thiếu loại Widget: {{type}}",
@@ -40,11 +47,7 @@
         "load": "Load",
         "temp": "TEMP",
         "max": "Max",
-        "uptime": "UP",
-        "months": "mo",
-        "days": "d",
-        "hours": "h",
-        "minutes": "m"
+        "uptime": "UP"
     },
     "unifi": {
         "users": "Users",
@@ -60,7 +63,7 @@
         "wlan_users": "WLAN Users",
         "up": "UP",
         "down": "DOWN",
-        "wait": "Vui lòng chờ",
+        "wait": "Please wait",
         "empty_data": "Subsystem status unknown"
     },
     "docker": {
@@ -84,7 +87,7 @@
         "ping": "Ping",
         "down": "Down",
         "up": "Up",
-        "not_available": "Not Available"
+        "not_available": "Không khả dụng"
     },
     "siteMonitor": {
         "http_status": "HTTP status",
@@ -104,13 +107,20 @@
         "episodes": "Episodes",
         "songs": "Songs"
     },
+    "esphome": {
+        "offline": "Offline",
+        "offline_alt": "Offline",
+        "online": "Online",
+        "total": "Total",
+        "unknown": "Unknown"
+    },
     "evcc": {
         "pv_power": "Production",
         "battery_soc": "Battery",
         "grid_power": "Grid",
         "home_power": "Consumption",
         "charge_power": "Charger",
-        "watt_hour": "Wh"
+        "kilowatt": "kW"
     },
     "flood": {
         "download": "Download",
@@ -123,7 +133,7 @@
         "unread": "Unread"
     },
     "fritzbox": {
-        "connectionStatus": "Trạng thái",
+        "connectionStatus": "Status",
         "connectionStatusUnconfigured": "Unconfigured",
         "connectionStatusConnecting": "Connecting",
         "connectionStatusAuthenticating": "Authenticating",
@@ -138,7 +148,9 @@
         "up": "Up",
         "received": "Received",
         "sent": "Sent",
-        "externalIPAddress": "Ext. IP"
+        "externalIPAddress": "Ext. IP",
+        "externalIPv6Address": "Ext. IPv6",
+        "externalIPv6Prefix": "Ext. IPv6-Prefix"
     },
     "caddy": {
         "upstreams": "Upstreams",
@@ -156,8 +168,8 @@
         "passes": "Passes"
     },
     "tautulli": {
-        "playing": "Đang chơi",
-        "transcoding": "Chuyển định dạng",
+        "playing": "Playing",
+        "transcoding": "Transcoding",
         "bitrate": "Bitrate",
         "no_active": "No Active Streams",
         "plex_connection_error": "Check Plex Connection"
@@ -166,7 +178,7 @@
         "connectedAp": "Connected APs",
         "activeUser": "Active devices",
         "alerts": "Alerts",
-        "connectedGateway": "Connected gateways",
+        "connectedGateways": "Connected gateways",
         "connectedSwitches": "Connected switches"
     },
     "nzbget": {
@@ -216,6 +228,10 @@
         "leech": "Leech",
         "seed": "Seed"
     },
+    "develancacheui": {
+        "cachehitbytes": "Cache Hit Bytes",
+        "cachemissbytes": "Cache Miss Bytes"
+    },
     "downloadstation": {
         "download": "Download",
         "upload": "Upload",
@@ -226,7 +242,7 @@
         "wanted": "Wanted",
         "queued": "Queued",
         "series": "Series",
-        "queue": "Hàng chờ",
+        "queue": "Queue",
         "unknown": "Unknown"
     },
     "radarr": {
@@ -234,7 +250,7 @@
         "missing": "Missing",
         "queued": "Queued",
         "movies": "Movies",
-        "queue": "Hàng chờ",
+        "queue": "Queue",
         "unknown": "Unknown"
     },
     "lidarr": {
@@ -257,18 +273,18 @@
         "available": "Available"
     },
     "jellyseerr": {
-        "pending": "Đang xử lý",
-        "approved": "Đã duyệt",
+        "pending": "Pending",
+        "approved": "Approved",
         "available": "Available"
     },
     "overseerr": {
-        "pending": "Đang xử lý",
+        "pending": "Pending",
         "processing": "Processing",
-        "approved": "Đã duyệt",
+        "approved": "Approved",
         "available": "Available"
     },
-    "pialert": {
-        "total": "Tổng",
+    "netalertx": {
+        "total": "Total",
         "connected": "Connected",
         "new_devices": "New Devices",
         "down_alerts": "Down Alerts"
@@ -293,7 +309,17 @@
     "portainer": {
         "running": "Running",
         "stopped": "Stopped",
-        "total": "Tổng"
+        "total": "Total"
+    },
+    "suwayomi": {
+        "download": "Downloaded",
+        "nondownload": "Non-Downloaded",
+        "read": "Read",
+        "unread": "Unread",
+        "downloadedread": "Downloaded & Read",
+        "downloadedunread": "Downloaded & Unread",
+        "nondownloadedread": "Non-Downloaded & Read",
+        "nondownloadedunread": "Non-Downloaded & Unread"
     },
     "tailscale": {
         "address": "Address",
@@ -309,8 +335,21 @@
         "seconds": "{{number}}s",
         "ago": "{{value}} Ago"
     },
+    "technitium": {
+        "totalQueries": "Queries",
+        "totalNoError": "Success",
+        "totalServerFailure": "Failures",
+        "totalNxDomain": "NX Domains",
+        "totalRefused": "Refused",
+        "totalAuthoritative": "Authoritative",
+        "totalRecursive": "Recursive",
+        "totalCached": "Cached",
+        "totalBlocked": "Blocked",
+        "totalDropped": "Dropped",
+        "totalClients": "Clients"
+    },
     "tdarr": {
-        "queue": "Hàng chờ",
+        "queue": "Queue",
         "processed": "Processed",
         "errored": "Errored",
         "saved": "Saved"
@@ -320,6 +359,12 @@
         "services": "Services",
         "middleware": "Middleware"
     },
+    "trilium": {
+        "version": "Version",
+        "notesCount": "Notes",
+        "dbSize": "Database Size",
+        "unknown": "Unknown"
+    },
     "navidrome": {
         "nothing_streaming": "No Active Streams",
         "please_wait": "Please Wait"
@@ -327,7 +372,7 @@
     "npm": {
         "enabled": "Enabled",
         "disabled": "Disabled",
-        "total": "Tổng"
+        "total": "Total"
     },
     "coinmarketcap": {
         "configure": "Configure one or more crypto currencies to track",
@@ -371,9 +416,9 @@
     "minecraft": {
         "players": "Players",
         "version": "Version",
-        "status": "Trạng thái",
+        "status": "Status",
         "up": "Online",
-        "down": "Ngoại tuyến"
+        "down": "Offline"
     },
     "miniflux": {
         "read": "Read",
@@ -393,14 +438,14 @@
     "glances": {
         "cpu": "CPU",
         "load": "Load",
-        "wait": "Vui lòng chờ",
+        "wait": "Please wait",
         "temp": "TEMP",
         "_temp": "Temp",
         "warn": "Warn",
         "uptime": "UP",
-        "total": "Tổng",
-        "free": "Dư",
-        "used": "Đã dùng",
+        "total": "Total",
+        "free": "Free",
+        "used": "Used",
         "days": "d",
         "hours": "h",
         "crit": "Crit",
@@ -416,7 +461,8 @@
         "search": "Search",
         "custom": "Custom",
         "visit": "Visit",
-        "url": "URL"
+        "url": "URL",
+        "searchsuggestion": "Suggestion"
     },
     "wmo": {
         "0-day": "Sunny",
@@ -484,16 +530,16 @@
         "child_bridges": "Child Bridges",
         "child_bridges_status": "{{ok}}/{{total}}",
         "up": "Up",
-        "pending": "Đang xử lý",
+        "pending": "Pending",
         "down": "Down"
     },
     "healthchecks": {
         "new": "New",
-        "up": "Online",
+        "up": "Up",
         "grace": "In Grace Period",
-        "down": "Ngoại tuyến",
+        "down": "Down",
         "paused": "Paused",
-        "status": "Trạng thái",
+        "status": "Status",
         "last_ping": "Last Ping",
         "never": "No pings yet"
     },
@@ -503,13 +549,13 @@
         "containers_failed": "Failed"
     },
     "autobrr": {
-        "approvedPushes": "Đã duyệt",
+        "approvedPushes": "Approved",
         "rejectedPushes": "Rejected",
         "filters": "Filters",
         "indexers": "Indexers"
     },
     "tubearchivist": {
-        "downloads": "Hàng chờ",
+        "downloads": "Queue",
         "videos": "Videos",
         "channels": "Channels",
         "playlists": "Playlists"
@@ -517,23 +563,31 @@
     "truenas": {
         "load": "System Load",
         "uptime": "Uptime",
-        "alerts": "Alerts",
-        "time": "{{value, number(style: unit; unitDisplay: long;)}}"
+        "alerts": "Alerts"
     },
     "pyload": {
         "speed": "Speed",
-        "active": "Hoạt động",
-        "queue": "Hàng chờ",
-        "total": "Tổng"
+        "active": "Active",
+        "queue": "Queue",
+        "total": "Total"
     },
     "gluetun": {
         "public_ip": "Public IP",
         "region": "Region",
-        "country": "Country"
+        "country": "Country",
+        "port_forwarded": "Port Forwarded"
     },
     "hdhomerun": {
         "channels": "Channels",
-        "hd": "HD"
+        "hd": "HD",
+        "tunerCount": "Tuners",
+        "channelNumber": "Channel",
+        "channelNetwork": "Network",
+        "signalStrength": "Strength",
+        "signalQuality": "Quality",
+        "symbolQuality": "Quality",
+        "networkRate": "Bitrate",
+        "clientIP": "Client"
     },
     "scrutiny": {
         "passed": "Passed",
@@ -542,7 +596,15 @@
     },
     "paperlessngx": {
         "inbox": "Inbox",
-        "total": "Tổng"
+        "total": "Total"
+    },
+    "peanut": {
+        "battery_charge": "Battery Charge",
+        "ups_load": "UPS Load",
+        "ups_status": "UPS Status",
+        "online": "Online",
+        "on_battery": "On Battery",
+        "low_battery": "Low Battery"
     },
     "nextdns": {
         "wait": "Please Wait",
@@ -578,14 +640,14 @@
         "layers": "Layers"
     },
     "octoprint": {
-        "printer_state": "Trạng thái",
+        "printer_state": "Status",
         "temp_tool": "Tool temp",
         "temp_bed": "Bed temp",
         "job_completion": "Completion"
     },
     "cloudflared": {
         "origin_ip": "Origin IP",
-        "status": "Trạng thái"
+        "status": "Status"
     },
     "pfsense": {
         "load": "Load Avg",
@@ -625,7 +687,7 @@
     "komga": {
         "libraries": "Libraries",
         "series": "Series",
-        "books": "Sách"
+        "books": "Books"
     },
     "diskstation": {
         "days": "Days",
@@ -644,10 +706,14 @@
         "people": "People"
     },
     "fileflows": {
-        "queue": "Hàng chờ",
+        "queue": "Queue",
         "processing": "Processing",
         "processed": "Processed",
         "time": "Time"
+    },
+    "firefly": {
+        "networth": "Net Worth",
+        "budget": "Budget"
     },
     "grafana": {
         "dashboards": "Dashboards",
@@ -664,7 +730,7 @@
         "numshares": "Shared Items"
     },
     "kopia": {
-        "status": "Trạng thái",
+        "status": "Status",
         "size": "Size",
         "lastrun": "Last Run",
         "nextrun": "Next Run",
@@ -684,6 +750,11 @@
         "targets_down": "Targets Down",
         "targets_total": "Total Targets"
     },
+    "gatus": {
+        "up": "Sites Up",
+        "down": "Sites Down",
+        "uptime": "Uptime"
+    },
     "ghostfolio": {
         "gross_percent_today": "Today",
         "gross_percent_1y": "One year",
@@ -691,7 +762,7 @@
     },
     "audiobookshelf": {
         "podcasts": "Podcasts",
-        "books": "Sách",
+        "books": "Books",
         "podcastsDuration": "Duration",
         "booksDuration": "Duration"
     },
@@ -705,13 +776,13 @@
         "updates": "Updates"
     },
     "calibreweb": {
-        "books": "Sách",
+        "books": "Books",
         "authors": "Authors",
         "categories": "Categories",
         "series": "Series"
     },
     "jdownloader": {
-        "downloadCount": "Hàng chờ",
+        "downloadCount": "Queue",
         "downloadBytesRemaining": "Remaining",
         "downloadTotalBytes": "Size",
         "downloadSpeed": "Speed"
@@ -722,7 +793,7 @@
     },
     "azuredevops": {
         "result": "Result",
-        "status": "Trạng thái",
+        "status": "Status",
         "buildId": "Build ID",
         "succeeded": "Succeeded",
         "notStarted": "Not Started",
@@ -731,12 +802,12 @@
         "inProgress": "In Progress",
         "totalPrs": "Total PRs",
         "myPrs": "My PRs",
-        "approved": "Đã duyệt"
+        "approved": "Approved"
     },
     "gamedig": {
-        "status": "Trạng thái",
+        "status": "Status",
         "online": "Online",
-        "offline": "Ngoại tuyến",
+        "offline": "Offline",
         "name": "Name",
         "map": "Map",
         "currentPlayers": "Current players",
@@ -759,14 +830,22 @@
     },
     "openmediavault": {
         "downloading": "Downloading",
-        "total": "Tổng",
+        "total": "Total",
         "running": "Running",
         "stopped": "Stopped",
         "passed": "Passed",
         "failed": "Failed"
     },
+    "openwrt": {
+        "uptime": "Uptime",
+        "cpuLoad": "CPU Load Avg (5m)",
+        "up": "Up",
+        "down": "Down",
+        "bytesTx": "Transmitted",
+        "bytesRx": "Received"
+    },
     "uptimerobot": {
-        "status": "Trạng thái",
+        "status": "Status",
         "uptime": "Uptime",
         "lastDown": "Last Downtime",
         "downDuration": "Downtime Duration",
@@ -784,6 +863,225 @@
         "physicalRelease": "Physical release",
         "digitalRelease": "Digital release",
         "noEventsToday": "No events for today!",
-        "noEventsFound": "No events found"
+        "noEventsFound": "No events found",
+        "errorWhenLoadingData": "Error when loading calendar data"
+    },
+    "romm": {
+        "platforms": "Platforms",
+        "totalRoms": "Games",
+        "saves": "Saves",
+        "states": "States",
+        "screenshots": "Screenshots",
+        "totalfilesize": "Total Size"
+    },
+    "mailcow": {
+        "domains": "Domains",
+        "mailboxes": "Mailboxes",
+        "mails": "Mails",
+        "storage": "Storage"
+    },
+    "netdata": {
+        "warnings": "Warnings",
+        "criticals": "Criticals"
+    },
+    "plantit": {
+        "events": "Events",
+        "plants": "Plants",
+        "photos": "Photos",
+        "species": "Species"
+    },
+    "gitea": {
+        "notifications": "Notifications",
+        "issues": "Issues",
+        "pulls": "Pull Requests",
+        "repositories": "Repositories"
+    },
+    "stash": {
+        "scenes": "Scenes",
+        "scenesPlayed": "Scenes Played",
+        "playCount": "Total Plays",
+        "playDuration": "Time Watched",
+        "sceneSize": "Scenes Size",
+        "sceneDuration": "Scenes Duration",
+        "images": "Images",
+        "imageSize": "Images Size",
+        "galleries": "Galleries",
+        "performers": "Performers",
+        "studios": "Studios",
+        "movies": "Movies",
+        "tags": "Tags",
+        "oCount": "O Count"
+    },
+    "tandoor": {
+        "users": "Users",
+        "recipes": "Recipes",
+        "keywords": "Keywords"
+    },
+    "homebox": {
+        "items": "Items",
+        "totalWithWarranty": "With Warranty",
+        "locations": "Locations",
+        "labels": "Labels",
+        "users": "Users",
+        "totalValue": "Total Value"
+    },
+    "crowdsec": {
+        "alerts": "Alerts",
+        "bans": "Bans"
+    },
+    "wgeasy": {
+        "connected": "Connected",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "total": "Total"
+    },
+    "swagdashboard": {
+        "proxied": "Proxied",
+        "auth": "With Auth",
+        "outdated": "Outdated",
+        "banned": "Banned"
+    },
+    "myspeed": {
+        "ping": "Ping",
+        "download": "Download",
+        "upload": "Upload"
+    },
+    "stocks": {
+        "stocks": "Stocks",
+        "loading": "Loading",
+        "open": "Open - US Market",
+        "closed": "Closed - US Market",
+        "invalidConfiguration": "Invalid Configuration"
+    },
+    "frigate": {
+        "cameras": "Cameras",
+        "uptime": "Uptime",
+        "version": "Version"
+    },
+    "linkwarden": {
+        "links": "Links",
+        "collections": "Collections",
+        "tags": "Tags"
+    },
+    "zabbix": {
+        "unclassified": "Not classified",
+        "information": "Information",
+        "warning": "Warning",
+        "average": "Average",
+        "high": "High",
+        "disaster": "Disaster"
+    },
+    "lubelogger": {
+        "vehicle": "Vehicle",
+        "vehicles": "Vehicles",
+        "serviceRecords": "Service Records",
+        "reminders": "Reminders",
+        "nextReminder": "Next Reminder",
+        "none": "None"
+    },
+    "vikunja": {
+        "projects": "Active Projects",
+        "tasks7d": "Tasks Due This Week",
+        "tasksOverdue": "Overdue Tasks",
+        "tasksInProgress": "Tasks In Progress"
+    },
+    "headscale": {
+        "name": "Name",
+        "address": "Address",
+        "last_seen": "Last Seen",
+        "status": "Status",
+        "online": "Online",
+        "offline": "Offline"
+    },
+    "beszel": {
+        "name": "Name",
+        "systems": "Systems",
+        "up": "Up",
+        "down": "Down",
+        "paused": "Paused",
+        "pending": "Pending",
+        "status": "Status",
+        "updated": "Updated",
+        "cpu": "CPU",
+        "memory": "MEM",
+        "disk": "Disk",
+        "network": "NET"
+    },
+    "argocd": {
+        "apps": "Apps",
+        "synced": "Synced",
+        "outOfSync": "Out Of Sync",
+        "healthy": "Healthy",
+        "degraded": "Degraded",
+        "progressing": "Progressing",
+        "missing": "Missing",
+        "suspended": "Suspended"
+    },
+    "spoolman": {
+        "loading": "Loading"
+    },
+    "gitlab": {
+        "groups": "Groups",
+        "issues": "Issues",
+        "merges": "Merge Requests",
+        "projects": "Projects"
+    },
+    "apcups": {
+        "status": "Status",
+        "load": "Load",
+        "bcharge": "Battery Charge",
+        "timeleft": "Time Left"
+    },
+    "karakeep": {
+        "bookmarks": "Bookmarks",
+        "favorites": "Favorites",
+        "archived": "Archived",
+        "highlights": "Highlights",
+        "lists": "Lists",
+        "tags": "Tags"
+    },
+    "slskd": {
+        "slskStatus": "Network",
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "updateStatus": "Update",
+        "update_yes": "Available",
+        "update_no": "Up to Date",
+        "downloads": "Downloads",
+        "uploads": "Uploads",
+        "sharedFiles": "Files"
+    },
+    "jellystat": {
+        "songs": "Songs",
+        "movies": "Movies",
+        "episodes": "Episodes",
+        "other": "Other"
+    },
+    "checkmk": {
+        "serviceErrors": "Service issues",
+        "hostErrors": "Host issues"
+    },
+    "komodo": {
+        "total": "Total",
+        "running": "Running",
+        "stopped": "Stopped",
+        "down": "Down",
+        "unhealthy": "Unhealthy",
+        "unknown": "Unknown",
+        "servers": "Servers",
+        "stacks": "Stacks",
+        "containers": "Containers"
+    },
+    "filebrowser": {
+        "available": "Available",
+        "used": "Used",
+        "total": "Total"
+    },
+    "wallos": {
+        "activeSubscriptions": "Subscriptions",
+        "thisMonthlyCost": "This Month",
+        "nextMonthlyCost": "Next Month",
+        "previousMonthlyCost": "Prev. Month",
+        "nextRenewingSubscription": "Next Payment"
     }
 }
